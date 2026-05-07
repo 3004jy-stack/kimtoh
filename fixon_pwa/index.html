@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1520">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FIX-ON">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-152.png">
+<title>FIX-ON 분석기</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { background:#07090f; color:#dde4f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; min-height:100vh; }
+
+.hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:#0f1520; border-bottom:1px solid #1e2d45; }
+.hdr-l { display:flex; align-items:center; gap:10px; }
+.hdr-icon { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#00c8ff,#0055ff); display:flex; align-items:center; justify-content:center; font-size:17px; }
+.hdr-title { font-size:14px; font-weight:700; }
+.hdr-sub { font-size:9px; color:#00c8ff; letter-spacing:2px; }
+.dot { width:8px; height:8px; border-radius:50%; background:#00e896; box-shadow:0 0 8px #00e896; animation:blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.step-wrap { padding:14px 18px 0; }
+.step-bars { display:flex; gap:5px; }
+.sbar { flex:1; height:3px; border-radius:2px; background:#1e2d45; transition:background .4s; }
+.sbar.on   { background:#00c8ff; }
+.sbar.done { background:#00e896; }
+.step-lbl { font-size:10px; color:#6a7d96; font-family:monospace; margin-top:5px; }
+
+.main { padding:12px 14px; display:flex; flex-direction:column; gap:10px; padding-bottom:40px; }
+
+.btn-row { display:flex; gap:8px; }
+.btn { flex:1; padding:14px 8px; border-radius:11px; border:none; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all .15s; }
+.btn:active { opacity:.8; transform:scale(.97); }
+.btn-p { background:linear-gradient(135deg,#00c8ff,#0055ff); color:#fff; }
+.btn-s { background:#141e2e; color:#dde4f0; border:1px solid #1e2d45; }
+.btn-r { background:rgba(255,98,64,.1); color:#ff6240; border:1px solid rgba(255,98,64,.3); }
+
+/* IMAGE */
+.img-wrap { position:relative; background:#0f1520; border:1px solid #1e2d45; border-radius:14px; overflow:hidden; min-height:220px; display:flex; align-items:center; justify-content:center; }
+.ph { display:flex; flex-direction:column; align-items:center; gap:10px; padding:50px 20px; color:#6a7d96; font-size:13px; text-align:center; }
+.ph-ico { font-size:44px; opacity:.25; }
+#previewImg { display:none; max-width:100%; max-height:420px; object-fit:contain; cursor:crosshair; touch-action:none; user-select:none; -webkit-user-select:none; }
+.ov { position:absolute; top:0; left:0; right:0; display:none; justify-content:space-between; align-items:center; padding:9px 11px; pointer-events:none; }
+.badge { padding:4px 10px; border-radius:16px; font-size:10px; font-family:monospace; backdrop-filter:blur(8px); }
+.badge-w { background:rgba(255,98,64,.18); color:#ff6240; border:1px solid rgba(255,98,64,.35); }
+.badge-b { background:rgba(0,200,255,.15); color:#00c8ff; border:1px solid rgba(0,200,255,.3); }
+.badge-g { background:rgba(0,232,150,.15); color:#00e896; border:1px solid rgba(0,232,150,.3); }
+#markerSvg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; display:none; }
+#hiddenCanvas { display:none; }
+
+/* CALIB */
+.calib-box { display:none; background:rgba(0,232,150,.05); border:1px solid rgba(0,232,150,.2); border-radius:10px; padding:9px 13px; font-size:11px; font-family:monospace; color:#00e896; line-height:1.9; }
+
+/* LOG */
+.log-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; }
+.log-title { font-size:11px; color:#6a7d96; font-family:monospace; }
+.log-clear { font-size:10px; color:#ff6240; background:none; border:none; cursor:pointer; font-family:monospace; }
+.log-list { display:flex; flex-direction:column; gap:6px; }
+.log-item { background:#141e2e; border:1px solid #1e2d45; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+.log-item-top { display:flex; align-items:center; gap:10px; }
+.log-num { font-size:11px; color:#6a7d96; font-family:monospace; min-width:26px; }
+.log-swatch { width:40px; height:40px; border-radius:8px; flex-shrink:0; }
+.log-raw-norm { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.lab-block { background:#0f1520; border:1px solid #1e2d45; border-radius:8px; padding:8px 10px; }
+.lab-block-title { font-size:9px; font-family:monospace; color:#6a7d96; margin-bottom:4px; }
+.lab-vals { font-size:11px; font-family:monospace; line-height:1.8; }
+.lv{color:#e0e8ff;} .av{color:#ff9090;} .bv{color:#ffe070;}
+
+.reset-row { display:none; justify-content:center; }
+
+/* 설치 배너 */
+.install-banner { display:none; background:linear-gradient(135deg,#0055ff22,#00c8ff22); border:1px solid #00c8ff44; border-radius:12px; padding:12px 14px; flex-direction:row; align-items:center; gap:12px; }
+.install-banner.show { display:flex; }
+.install-text { flex:1; font-size:12px; line-height:1.5; color:#dde4f0; }
+.install-text strong { color:#00c8ff; }
+.install-btn { padding:8px 14px; border-radius:8px; border:none; background:#00c8ff; color:#07090f; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+
+/* TOAST */
+.toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#0f1520; border:1px solid #00c8ff; color:#00c8ff; padding:9px 18px; border-radius:18px; font-size:12px; font-family:monospace; opacity:0; transition:opacity .3s; pointer-events:none; z-index:200; white-space:nowrap; }
+.toast.on { opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-l">
+    <div class="hdr-icon">⚡</div>
+    <div>
+      <div class="hdr-title">FIX-ON 분석기</div>
+      <div class="hdr-sub">GAZIRUNY DENTAL LAB</div>
+    </div>
+  </div>
+  <div class="dot"></div>
+</div>
+
+<div class="step-wrap">
+  <div class="step-bars">
+    <div class="sbar on" id="sb1"></div>
+    <div class="sbar"    id="sb2"></div>
+    <div class="sbar"    id="sb3"></div>
+  </div>
+  <div class="step-lbl" id="slbl">STEP 1 · 사진 불러오기</div>
+</div>
+
+<div class="main">
+
+  <!-- 설치 배너 -->
+  <div class="install-banner" id="installBanner">
+    <div class="install-text"><strong>홈화면에 설치하기</strong><br>앱처럼 바로 실행할 수 있습니다</div>
+    <button class="install-btn" id="installBtn">설치</button>
+  </div>
+
+  <div class="btn-row" id="upBtns">
+    <button class="btn btn-p" onclick="document.getElementById('camIn').click()">📷 카메라 촬영</button>
+    <button class="btn btn-s" onclick="document.getElementById('libIn').click()">🖼 라이브러리</button>
+  </div>
+  <input type="file" id="camIn" accept="image/*" capture="environment" style="display:none">
+  <input type="file" id="libIn" accept="image/*" style="display:none">
+
+  <div class="img-wrap">
+    <div class="ph" id="ph">
+      <div class="ph-ico">🦷</div>
+      사진을 불러오면<br>여기에 표시됩니다
+    </div>
+    <img id="previewImg" alt="">
+    <svg id="markerSvg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+    <div class="ov" id="ov">
+      <span class="badge badge-w" id="stepBadge">① 그레이 카드 터치</span>
+      <span class="badge badge-g" id="calBadge" style="display:none">교정 완료 ✓</span>
+    </div>
+  </div>
+  <canvas id="hiddenCanvas"></canvas>
+
+  <div class="calib-box" id="calibBox"></div>
+
+  <div id="logWrap" style="display:none">
+    <div class="log-header">
+      <span class="log-title" id="logTitle">LAB 분석 기록</span>
+      <button class="log-clear" onclick="clearLog()">✕ 초기화</button>
+    </div>
+    <div class="log-list" id="logList"></div>
+  </div>
+
+  <div class="reset-row" id="resetRow">
+    <button class="btn btn-r" style="max-width:180px" onclick="resetAll()">🔄 처음부터</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── PWA 설치 ──────────────────────────────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBanner').classList.add('show');
+});
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('installBanner').classList.remove('show');
+    showToast('설치 완료! 홈화면에서 실행하세요 ✓');
+  }
+  deferredPrompt = null;
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installBanner').classList.remove('show');
+});
+
+// ── Service Worker 등록 ───────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── 상태 ─────────────────────────────────────────────────────────────────────
+let step = 0;
+let calibOffset = { dL:0, dA:0, dB:0 };
+let currentImg = null;
+let points = [];
+let ptCount = 0;
+
+const hiddenCv = document.getElementById('hiddenCanvas');
+const hCtx     = hiddenCv.getContext('2d', { willReadFrequently: true });
+const prevImg  = document.getElementById('previewImg');
+const mkSvg    = document.getElementById('markerSvg');
+
+const COLORS = [
+  '#00c8ff','#00e896','#ffc800','#ff6240',
+  '#c084fc','#fb7185','#34d399','#60a5fa',
+  '#f97316','#a3e635','#e879f9','#38bdf8',
+];
+
+// ── 파일 입력 ─────────────────────────────────────────────────────────────────
+document.getElementById('camIn').addEventListener('change', function(){ loadFile(this.files[0]); this.value=''; });
+document.getElementById('libIn').addEventListener('change', function(){ loadFile(this.files[0]); this.value=''; });
+
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) { showToast('이미지 파일만 가능합니다'); return; }
+  showToast('사진 불러오는 중...');
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    hiddenCv.width  = img.naturalWidth;
+    hiddenCv.height = img.naturalHeight;
+    hCtx.drawImage(img, 0, 0);
+    currentImg = img;
+    prevImg.src = url;
+    prevImg.style.display = 'block';
+    document.getElementById('ph').style.display = 'none';
+    document.getElementById('ov').style.display = 'flex';
+    mkSvg.style.display = 'block';
+    setStep(1);
+    showToast('사진 로드 완료 ✓');
+  };
+  img.onerror = () => { showToast('사진 로드 실패'); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+// ── 터치 / 클릭 ───────────────────────────────────────────────────────────────
+prevImg.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0], r = prevImg.getBoundingClientRect();
+  onPoint(t.clientX - r.left, t.clientY - r.top, r.width, r.height);
+}, { passive: false });
+prevImg.addEventListener('click', e => {
+  const r = prevImg.getBoundingClientRect();
+  onPoint(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+});
+
+function onPoint(x, y, dW, dH) {
+  if (!currentImg) return;
+  const raw = getAreaLAB(Math.round(x*hiddenCv.width/dW), Math.round(y*hiddenCv.height/dH), 12);
+  const xP  = (x/dW*100).toFixed(2);
+  const yP  = (y/dH*100).toFixed(2);
+
+  if (step === 1) {
+    calibOffset = { dL:50-raw.L, dA:0-raw.a, dB:0-raw.b };
+    addMarker('gray', xP, yP, '#00e896', '⊕');
+    document.getElementById('calBadge').style.display = 'block';
+    document.getElementById('calibBox').style.display = 'block';
+    document.getElementById('calibBox').innerHTML =
+      `교정 기준 | L:${raw.L.toFixed(1)}  a:${raw.a.toFixed(1)}  b:${raw.b.toFixed(1)}<br>` +
+      `오프셋 → dL:${calibOffset.dL.toFixed(1)}  dA:${calibOffset.dA.toFixed(1)}  dB:${calibOffset.dB.toFixed(1)}`;
+    setStep(2);
+    showToast('교정 완료 — 분석할 부위를 터치하세요');
+
+  } else if (step === 2) {
+    const norm  = applyCalib(raw);
+    ptCount++;
+    const color = COLORS[(ptCount-1) % COLORS.length];
+    points.push({ raw, norm, color });
+    addMarker('pt'+ptCount, xP, yP, color, ptCount);
+    renderLog();
+    document.getElementById('logWrap').style.display = 'block';
+    document.getElementById('resetRow').style.display = 'flex';
+  }
+}
+
+function applyCalib(raw) {
+  return {
+    L: Math.max(0, Math.min(100, raw.L + calibOffset.dL)),
+    a: raw.a + calibOffset.dA,
+    b: raw.b + calibOffset.dB,
+  };
+}
+
+function renderLog() {
+  document.getElementById('logTitle').textContent = `LAB 분석 기록 (${points.length}개)`;
+  document.getElementById('logList').innerHTML = points.map((p, i) =>
+    `<div class="log-item">
+      <div class="log-item-top">
+        <div class="log-num">#${i+1}</div>
+        <div class="log-swatch" style="background:${p.color}33; border:2px solid ${p.color};"></div>
+        <div style="font-size:11px; color:${p.color}; font-family:monospace; font-weight:700;">포인트 ${i+1}</div>
+      </div>
+      <div class="log-raw-norm">
+        <div class="lab-block">
+          <div class="lab-block-title">RAW (교정 전)</div>
+          <div class="lab-vals">
+            L: <span class="lv">${p.raw.L.toFixed(2)}</span><br>
+            a: <span class="av">${p.raw.a.toFixed(2)}</span><br>
+            b: <span class="bv">${p.raw.b.toFixed(2)}</span>
+          </div>
+        </div>
+        <div class="lab-block" style="border-color:${p.color}44;">
+          <div class="lab-block-title" style="color:${p.color};">NORM (교정 후)</div>
+          <div class="lab-vals">
+            L: <span class="lv">${p.norm.L.toFixed(2)}</span><br>
+            a: <span class="av">${p.norm.a.toFixed(2)}</span><br>
+            b: <span class="bv">${p.norm.b.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+function clearLog() {
+  points = []; ptCount = 0;
+  document.getElementById('logList').innerHTML = '';
+  document.getElementById('logWrap').style.display = 'none';
+  document.getElementById('resetRow').style.display = 'none';
+  mkSvg.querySelectorAll('[data-type="pt"]').forEach(e => e.remove());
+}
+
+function getAreaLAB(cx, cy, r) {
+  const W=hiddenCv.width, H=hiddenCv.height;
+  const x1=Math.max(0,cx-r), y1=Math.max(0,cy-r);
+  const x2=Math.min(W,cx+r), y2=Math.min(H,cy+r);
+  const w=x2-x1, h=y2-y1;
+  if(w<=0||h<=0) return {L:50,a:0,b:0};
+  const d=hCtx.getImageData(x1,y1,w,h).data;
+  let sr=0,sg=0,sb=0,cnt=0;
+  for(let i=0;i<d.length;i+=4){sr+=d[i];sg+=d[i+1];sb+=d[i+2];cnt++;}
+  return rgb2lab(sr/cnt/255, sg/cnt/255, sb/cnt/255);
+}
+function rgb2lab(r,g,b) {
+  const lin=c=>c>.04045?Math.pow((c+.055)/1.055,2.4):c/12.92;
+  const rl=lin(r),gl=lin(g),bl=lin(b);
+  const X=rl*.4124564+gl*.3575761+bl*.1804375;
+  const Y=rl*.2126729+gl*.7151522+bl*.0721750;
+  const Z=rl*.0193339+gl*.1191920+bl*.9503041;
+  const f=t=>t>.008856?Math.cbrt(t):7.787*t+16/116;
+  return {L:116*f(Y)-16, a:500*(f(X/.95047)-f(Y)), b:200*(f(Y)-f(Z/1.08883))};
+}
+
+function addMarker(id, xP, yP, color, label) {
+  const type = id.startsWith('pt') ? 'pt' : 'gray';
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('data-type', type);
+  const c1=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c1.setAttribute('cx',xP); c1.setAttribute('cy',yP); c1.setAttribute('r','4');
+  c1.setAttribute('fill','none'); c1.setAttribute('stroke',color); c1.setAttribute('stroke-width','0.7');
+  const c2=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c2.setAttribute('cx',xP); c2.setAttribute('cy',yP); c2.setAttribute('r','1.2'); c2.setAttribute('fill',color);
+  const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+  tx.setAttribute('x',xP); tx.setAttribute('y',parseFloat(yP)-5.5);
+  tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','3.5');
+  tx.setAttribute('font-weight','bold'); tx.setAttribute('fill',color);
+  tx.setAttribute('font-family','monospace'); tx.textContent=label;
+  g.appendChild(c1); g.appendChild(c2); g.appendChild(tx);
+  mkSvg.appendChild(g);
+}
+
+function setStep(s) {
+  step = s;
+  ['sb1','sb2','sb3'].forEach((id,i) => {
+    document.getElementById(id).className = 'sbar'+(i<s-1?' done':i===s-1?' on':'');
+  });
+  const lbl=document.getElementById('slbl'), sb=document.getElementById('stepBadge');
+  if(s===1){
+    lbl.textContent='STEP 2 · 그레이 카드를 터치하세요';
+    sb.textContent='① 그레이 카드 터치'; sb.className='badge badge-w';
+    document.getElementById('upBtns').style.display='none';
+  } else if(s===2){
+    lbl.textContent='STEP 3 · 분석할 부위를 터치하세요 (여러 곳 가능)';
+    sb.textContent='② 터치하여 LAB 분석'; sb.className='badge badge-b';
+  }
+}
+
+function resetAll() {
+  step=0; calibOffset={dL:0,dA:0,dB:0}; currentImg=null; points=[]; ptCount=0;
+  prevImg.style.display='none'; prevImg.src='';
+  document.getElementById('ph').style.display='flex';
+  document.getElementById('ov').style.display='none';
+  mkSvg.style.display='none'; mkSvg.innerHTML='';
+  document.getElementById('calibBox').style.display='none';
+  document.getElementById('logWrap').style.display='none';
+  document.getElementById('logList').innerHTML='';
+  document.getElementById('resetRow').style.display='none';
+  document.getElementById('upBtns').style.display='flex';
+  document.getElementById('calBadge').style.display='none';
+  ['sb1','sb2','sb3'].forEach((id,i) =>
+    document.getElementById(id).className='sbar'+(i===0?' on':''));
+  document.getElementById('slbl').textContent='STEP 1 · 사진 불러오기';
+  document.getElementById('stepBadge').textContent='① 그레이 카드 터치';
+  document.getElementById('stepBadge').className='badge badge-w';
+  hiddenCv.width=1; hiddenCv.height=1;
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'),2500);
+}
+</script>
+</body>
+</html>
