@@ -1803,6 +1803,8 @@ function chooseAnalysisMode(mode){
   document.getElementById('modeSelect').style.display='none';
   calibOffset={dL:0,dA:0,dB:0};
   grayRawRGB=null; calRefs=[]; calFit=null;
+  applyCalibPreview();           // 기준물 초기화 → 화면도 무보정 원본으로 복원
+  if(srcCanvas) redraw();
   if(mode==='lab'){
     useGrayCard=false;
     setStep(2);
@@ -1839,8 +1841,11 @@ function pickRef(kind,id){
   if(!addCalRef(kind, id||null, pendingRefRaw)){ showToast('기준물 정보 없음'); return; }
   pendingRefRaw=null;
   document.getElementById('refPickerModal').style.display='none';
+  applyCalibPreview();            // 화면에 보정 결과 반영
+  redraw();
   renderCalibBox();
-  showToast(`기준물 ${calRefs.length}개 등록 · 더 추가하거나 [측정 시작]`);
+  const _m = calFit && calFit.n>1 ? '게인+오프셋' : '게인';
+  showToast(`기준물 ${calRefs.length}개 등록 (${_m}) · 사진 보정됨`);
 }
 
 // 보정 현황 표시 (간결 + 상세 접기)
@@ -3933,22 +3938,36 @@ function getAreaRGB(cx, cy, r) {
   return {r:sr/cnt, g:sg/cnt, b:sb/cnt};
 }
 
-function applyImageCorrection(grayRGB) {
-  if (!srcCanvas) return;
-  // 실측 기준 RGB (Fix-on, ISO200, SS1/250, WB5600K)
-  const scaleR = TARGET.r / Math.max(1, grayRGB.r);
-  const scaleG = TARGET.g / Math.max(1, grayRGB.g);
-  const scaleB = TARGET.b / Math.max(1, grayRGB.b);
+// ── 보정 미리보기 (화면 전용) ────────────────────────────────────────────────
+// 무보정 원본(srcCanvasOrig)에 calFit(게인+오프셋)을 적용해 화면용 srcCanvas를 다시 만든다.
+// · 측정 경로(getAreaRGBOrig / measureCorrectLAB)는 srcCanvasOrig를 쓰므로 영향 없음
+// · 매번 원본에서 다시 그리므로 기준물을 추가해도 보정이 누적되지 않음
+// · 픽셀마다 pow를 부르면 느리므로 채널별 256단계 LUT로 처리
+function applyCalibPreview(){
+  if(!srcCanvas || !srcCanvasOrig) return;
   const ctx = srcCanvas.getContext('2d', {willReadFrequently:true});
-  const imgData = ctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
-  const d = imgData.data;
+  ctx.clearRect(0,0,srcCanvas.width,srcCanvas.height);
+  ctx.drawImage(srcCanvasOrig, 0, 0, srcCanvas.width, srcCanvas.height);
+  if(!calFit) return;                       // 기준물 없으면 원본 그대로
+  const ch=['r','g','b'];
+  const lut = ch.map(c=>{
+    const t=new Uint8ClampedArray(256);
+    for(let v=0; v<256; v++)
+      t[v] = Math.round(srgbEnc(Math.max(0, calFit.gain[c]*srgbLin(v) + calFit.offset[c])));
+    return t;
+  });
+  const img = ctx.getImageData(0,0,srcCanvas.width,srcCanvas.height);
+  const d = img.data;
   for(let i=0;i<d.length;i+=4){
-    d[i]  =Math.min(255,Math.round(d[i]  *scaleR));
-    d[i+1]=Math.min(255,Math.round(d[i+1]*scaleG));
-    d[i+2]=Math.min(255,Math.round(d[i+2]*scaleB));
+    d[i]   = lut[0][d[i]];
+    d[i+1] = lut[1][d[i+1]];
+    d[i+2] = lut[2][d[i+2]];
   }
-  ctx.putImageData(imgData, 0, 0);
+  ctx.putImageData(img, 0, 0);
 }
+
+// (옛 applyImageCorrection 제거 — 감마를 무시한 단순 RGB 배율이라 calFit과 맞지 않았고,
+//  모드 통합 이후 호출부가 사라져 화면에 보정이 전혀 반영되지 않았음)
 
 function showToast(msg){
   const t=document.getElementById('toast');
