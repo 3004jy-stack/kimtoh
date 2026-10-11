@@ -1271,6 +1271,19 @@ function addCalRef(kind, id, raw){
   return true;
 }
 
+// 측정 부위가 기준물 명도 범위 안인지 — 벗어나면 외삽이라 보정 오차가 크게 벌어진다.
+// (실측 사례: 기준 A2~A3.5(L76.0~82.8)로 보정하고 범위 밖 A4(L72.4)를 재니 ΔE 5.1,
+//  같은 보정에서 범위 안 A3는 ΔE 0.8)
+function extrapWarn(lab){
+  if(!lab || calRefs.length < 2) return '';
+  const Ls = calRefs.map(f=>f.trueLab.L);
+  const lo = Math.min(...Ls), hi = Math.max(...Ls);
+  const m = 1.0;                                   // 경계 바로 바깥은 허용
+  if(lab.L > hi + m) return `⚠️ 기준보다 밝음 — 더 밝은 탭을 기준에 추가하세요`;
+  if(lab.L < lo - m) return `⚠️ 기준보다 어두움 — 더 어두운 탭을 기준에 추가하세요`;
+  return '';
+}
+
 // 검증: 각 기준물의 보정 후 LAB vs 실제값 ΔE (leave-one-out은 2개 이상일 때)
 function calRefResiduals(){
   return calRefs.map(f=>{
@@ -1564,7 +1577,10 @@ function commitPoint(clientX, clientY) {
     // LAB(무료) 모드: 스테인 레시피/AI 분석 버튼 숨김 — 측정값만 제공
     document.getElementById('analyzeRow').style.display = (ANALYSIS_MODE==='lab')?'none':'flex';
     document.getElementById('savePhotoRow').style.display = 'block';
-    showToast(`#${ptCount} 기록 완료`);
+    // 외삽 경고 — 측정 부위가 기준물 명도 범위를 벗어나면 보정 신뢰도가 급격히 떨어진다.
+    // (기준 범위 안이면 내삽이라 정확하지만, 밖이면 오차가 크게 벌어짐)
+    const _w = extrapWarn(norm);
+    showToast(_w ? `#${ptCount} 기록 · ${_w}` : `#${ptCount} 기록 완료`);
   }
 }
 
@@ -1963,7 +1979,7 @@ const SPECTRUM_STAINS = [
     coats:{1:[83.30, 2.18, 9.24], 2:[80.14, 4.15,13.15], 3:[42.55,33.86,43.26]} }, // 3회 실측. 고채도 안료라 임계농도 넘으며 급발색(외삽 아님)
   { id:"SPS-10", line:"Spectrum", name:"Dark Walnut",      L:49.93, a:12.57, b:21.85,
     coats:{1:[86.68,-0.11, 4.92], 2:[80.65, 1.86, 9.65], 3:[49.93,12.57,21.85]} },
-  { id:"SPS-11", line:"Spectrum", name:"Coral",            L:64.87, a:23.18, b:11.89,
+  { id:"SPS-11", line:"Spectrum", name:"Coral",            L:64.87, a:23.18, b:11.89, gingival:true,
     coats:{1:[83.78, 3.27, 4.50], 2:[72.02,16.87, 8.95], 3:[64.87,23.18,11.89]} },
   { id:"SPS-12", line:"Spectrum", name:"Denim Blue",       L:64.57, a:-1.13, b:-11.77,
     coats:{1:[86.51,-2.13, 2.11], 2:[76.03,-1.79,-3.38], 3:[64.57,-1.13,-11.77]}, incisal:true },
@@ -3685,11 +3701,20 @@ function suggestCoats(recipe, tgt){
   }
   const wSum=items.reduce((t,i)=>t+i.w,0);
   if(wSum<=0) return null;
+  // 회차별 혼합도 본 계산과 동일 조건으로 — 안료 감산혼합(K-M) + 코핑 비침(coverage) 반영.
+  // (LAB 단순평균 + 코핑 무시로 계산하면 실제 ΔE와 크게 어긋나 권장 회차가 틀어진다)
+  const cv = (typeof recipe.coverage==='number') ? recipe.coverage : 1;
   const table=[1,2,3].map(n=>{
-    let L=0,a=0,b=0;
-    items.forEach(i=>{ const c=i.s.coats[n]; const w=i.w/wSum;
-      L+=c[0]*w; a+=c[1]*w; b+=c[2]*w; });
-    return {n, L, a, b, dE:deltaE(tgt.L,tgt.a,tgt.b,L,a,b)};
+    const cols = items.map(i=>({L:i.s.coats[n][0], a:i.s.coats[n][1], b:i.s.coats[n][2]}));
+    const ws   = items.map(i=>i.w);
+    let m;
+    if(cv < 1){
+      const st = ws.reduce((x,y)=>x+y,0) || 1;
+      m = mixKM([COPING_BASE, ...cols], [(1-cv)*st, ...ws.map(w=>w*cv)]);
+    } else {
+      m = mixKM(cols, ws);
+    }
+    return {n, L:m.L, a:m.a, b:m.b, dE:deltaE(tgt.L,tgt.a,tgt.b,m.L,m.a,m.b)};
   });
   const best=table.reduce((m,x)=>x.dE<m.dE?x:m, table[0]);
   return {best, table};
@@ -3715,11 +3740,34 @@ function buildRecipeNote(recipe, tgt, blend, diag){
       : (Math.abs(tgt.a)>2 ? (tgt.a>0?'붉은기':'녹색기') : '중성');
   lines.push(`목표: <b>${tgtHue} 위주</b> (L${tgt.L.toFixed(0)} a${tgt.a.toFixed(1)} b${tgt.b.toFixed(1)})`);
   lines.push(`주색: <b>${main?main.name:sorted[0].stain}</b> — ${hueOf(main)} 계열`);
+  // 보조색의 역할 — 그 색을 뺐을 때 혼합색이 어느 축으로 가장 크게 변하는지로 판정.
+  // (색끼리 L을 단순 비교하면 명도차가 큰 색은 무조건 '명도 낮춤'으로 오판된다.
+  //  예: Coral은 실제로는 붉은기를 주려고 넣는데 L이 낮아 '명도 낮춤'으로 표시되던 버그)
+  const _all = sorted.map(r=>db(r.stain)).filter(Boolean);
+  const _w   = sorted.map(r=>r.ratio||0);
+  const _full = (_all.length===sorted.length) ? mixKM(_all,_w) : null;
   for(let k=1;k<sorted.length;k++){
     const sub=db(sorted[k].stain);
     if(!sub||!main) continue;
-    const dL=sub.L-main.L;
-    const role = Math.abs(dL)>=6 ? (dL>0?'명도 올림':'명도 낮춤') : `${hueOf(sub)}기 보강`;
+    let role=null;
+    if(_full){
+      const it2=_all.filter((_,j)=>j!==k), w2=_w.filter((_,j)=>j!==k);
+      if(it2.length){
+        const wo=mixKM(it2,w2);
+        const dL=_full.L-wo.L, da=_full.a-wo.a, dbv=_full.b-wo.b;
+        const ax=[['L',Math.abs(dL)],['a',Math.abs(da)],['b',Math.abs(dbv)]]
+                 .sort((x,y)=>y[1]-x[1]);
+        if(ax[0][1]>=0.3){
+          if(ax[0][0]==='L')      role = dL<0 ? '명도 낮춤' : '명도 올림';
+          else if(ax[0][0]==='a') role = da>0 ? '붉은기 보강' : '붉은기 억제';
+          else                    role = dbv>0 ? '노란기 보강' : '노란기 억제';
+        }
+      }
+    }
+    if(!role){                                   // 계산 불가 시 기존 방식으로 폴백
+      const dL=sub.L-main.L;
+      role = Math.abs(dL)>=6 ? (dL>0?'명도 올림':'명도 낮춤') : `${hueOf(sub)}기 보강`;
+    }
     lines.push(`보조: <b>${sub.name}</b> — ${role}`);
   }
 
@@ -3740,6 +3788,12 @@ function buildRecipeNote(recipe, tgt, blend, diag){
     lines.push(`도포: <b>${sc.best.n}회</b> 권장 (예상 ΔE ${sc.best.dE.toFixed(1)}) <span style="color:#6a7d96;">— ${t}</span>`);
     if(sc.best.n===3)
       lines.push(`<span style="color:#6a7d96;">3회는 발색이 급격히 오릅니다 — 2회 후 재촬영해 확인하며 올리세요.</span>`);
+  }
+
+  // ③' 치은 전용 계열 주의 — 몸통에 쓰면 실무와 어긋남 (붉은기 공급원이 이것뿐이라 선택됨)
+  const ging = sorted.map(r=>db(r.stain)).filter(s=>s&&s.gingival);
+  if(ging.length){
+    lines.push(`📌 <b>${ging.map(s=>s.name).join(', ')}</b>는 <b>치은부</b>에 주로 쓰는 색입니다 — 붉은기를 내려고 선택됐습니다. 치경부라면 그대로 쓰시고, 중앙·절단부라면 소량만 쓰거나 다른 라인을 검토하세요.`);
   }
 
   // ③ 절단부 전용 계열 주의 — 노란 코핑 위 얇은 층에서는 파랑이 반전됨
